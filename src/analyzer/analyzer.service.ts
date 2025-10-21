@@ -7,6 +7,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { FilterDto } from './dto/filter.dto';
@@ -25,51 +26,107 @@ export interface StringAnalysis {
 export class AnalyzerService {
   private analyses: StringAnalysis[] = [];
   private applyFilters(filters: any) {
-    let results = [...this.analyses];
-    if (filters.is_palindrome !== undefined) {
-      results = results.filter(
-        (result) => result.is_palindrome === Boolean(filters.is_palindrome),
-      );
-    }
+    try {
+      let results = [...this.analyses];
 
-    if (filters.max_length !== undefined) {
-      results = results.filter(
-        (result) => result.length <= filters.max_length!,
-      );
-    }
+      const {
+        is_palindrome,
+        min_length,
+        max_length,
+        word_count,
+        contains_character,
+      } = filters;
+      // Validation checks
+      if (
+        is_palindrome !== undefined &&
+        is_palindrome !== 'true' &&
+        is_palindrome !== 'false'
+      ) {
+        throw new BadRequestException(
+          "Invalid value for 'is_palindrome'. Must be true or false.",
+        );
+      }
+      if (min_length !== undefined && isNaN(Number(min_length))) {
+        throw new BadRequestException(
+          "Invalid value for 'min_length'. Must be a number.",
+        );
+      }
 
-    if (filters.min_length !== undefined) {
-      results = results.filter(
-        (result) => result.length >= filters.min_length!,
-      );
+      if (max_length !== undefined && isNaN(Number(max_length))) {
+        throw new BadRequestException(
+          "Invalid value for 'max_length'. Must be a number.",
+        );
+      }
+
+      if (word_count !== undefined && isNaN(Number(word_count))) {
+        throw new BadRequestException(
+          "Invalid value for 'word_count'. Must be a number.",
+        );
+      }
+
+      if (
+        contains_character !== undefined &&
+        (typeof contains_character !== 'string' ||
+          contains_character.length !== 1)
+      ) {
+        throw new BadRequestException(
+          "Invalid value for 'contains_character'. Must be a single character.",
+        );
+      }
+      if (filters.is_palindrome !== undefined) {
+        const isPalindrome =
+          filters.is_palindrome === 'true' || filters.is_palindrome === true;
+        results = results.filter(
+          (result) => result.is_palindrome === isPalindrome,
+        );
+      }
+
+      if (filters.max_length !== undefined) {
+        results = results.filter(
+          (result) => result.length <= filters.max_length!,
+        );
+      }
+
+      if (filters.min_length !== undefined) {
+        results = results.filter(
+          (result) => result.length >= filters.min_length!,
+        );
+      }
+      if (filters.word_count !== undefined) {
+        results = results.filter(
+          (result) => result.word_count === Number(filters.word_count),
+        );
+      }
+      if (filters.contains_character) {
+        const character = filters.contains_character.toLowerCase();
+        results = results.filter((r) =>
+          r.input.toLowerCase().includes(character),
+        );
+      }
+      return results;
+    } catch (error) {
+      console.log(error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException('Failed to process filters');
     }
-    if (filters.word_count !== undefined) {
-      results = results.filter(
-        (result) => result.word_count === Number(filters.word_count),
-      );
-    }
-    if (filters.contains_character) {
-      const character = filters.contains_character.toLowerCase();
-      results = results.filter((r) =>
-        r.input.toLowerCase().includes(character),
-      );
-    }
-    return results;
   }
 
   //Analyze a string
   analyzeString(input: string) {
     try {
-      if (!input) {
-        throw new BadRequestException(`Invalid request`);
-      }
+      if (!input || input === undefined)
+        throw new BadRequestException("Missing required field 'input'");
 
-      if (typeof input !== 'string') {
-        throw new BadRequestException('Invalid data');
-      }
+      if (typeof input !== 'string')
+        throw new UnprocessableEntityException(
+          "Invalid data type for 'input' (must be string)",
+        );
 
       if (this.analyses.some((a) => a.input === input)) {
-        throw new ConflictException('Value already exists');
+        throw new ConflictException(`"${input}" already exists`);
       }
 
       // Clean and normalize
@@ -109,7 +166,8 @@ export class AnalyzerService {
 
       if (
         error instanceof ConflictException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof UnprocessableEntityException
       ) {
         throw error;
       }
@@ -133,6 +191,7 @@ export class AnalyzerService {
       };
     } catch (error) {
       console.log(error);
+      if (error instanceof BadRequestException) throw error;
       throw new InternalServerErrorException(
         'Failed to fetch data, Please try again',
       );
@@ -171,7 +230,6 @@ export class AnalyzerService {
       ) {
         filters.is_palindrome = true;
       }
-
       if (
         normalized.includes('not palindrome') ||
         normalized.includes('not palindromic')
@@ -179,48 +237,47 @@ export class AnalyzerService {
         filters.is_palindrome = false;
       }
 
-      // --- Detect Word Count ---
+      // --- Word count ---
       const wordCountMatch = normalized.match(/(\d+)\s*word/);
-      if (wordCountMatch) {
-        filters.word_count = parseInt(wordCountMatch[1]);
-      } else if (normalized.includes('single word')) {
-        filters.word_count = 1;
-      }
+      if (wordCountMatch) filters.word_count = parseInt(wordCountMatch[1]);
+      else if (normalized.includes('single word')) filters.word_count = 1;
 
-      // --- Detect Length Filters ---
+      // --- Length filters ---
       const minLengthMatch = normalized.match(/longer than\s*(\d+)/);
-      if (minLengthMatch) {
-        filters.min_length = parseInt(minLengthMatch[1]);
-      }
-
+      if (minLengthMatch) filters.min_length = parseInt(minLengthMatch[1]);
       const maxLengthMatch = normalized.match(/shorter than\s*(\d+)/);
-      if (maxLengthMatch) {
-        filters.max_length = parseInt(maxLengthMatch[1]);
-      }
+      if (maxLengthMatch) filters.max_length = parseInt(maxLengthMatch[1]);
 
-      // --- Detect Character Containment ---
+      // --- Character containment ---
       const containsMatch = normalized.match(
         /containing (?:letter |character )?([a-z])/,
       );
-      if (containsMatch) {
-        filters.contains_character = containsMatch[1];
-      }
+      if (containsMatch) filters.contains_character = containsMatch[1];
 
-      // --- Validate filters ---
       if (Object.keys(filters).length === 0) {
         throw new BadRequestException(
-          'Could not interpret your natural language query. Try including words like "palindrome", "longer than", or "single word".',
+          'Unable to parse natural language query. Include words like "palindrome", "longer than", or "single word".',
         );
       }
 
-      // --- Apply filtering logic ---
+      if (
+        filters.is_palindrome === false &&
+        filters.word_count === 1 &&
+        normalized.includes('palindrome')
+      ) {
+        throw new UnprocessableEntityException(
+          'Query parsed but resulted in conflicting filters',
+        );
+      }
+
+      // --- Apply filters ---
       const results = this.applyFilters(filters);
 
-      // --- Handle empty results ---
       if (!results || results.length === 0) {
-        throw new NotFoundException(
-          'No matching records found for your query. Try adjusting the phrase or add more data first.',
-        );
+        throw new NotFoundException({
+          message: 'No matching records found for your query',
+          parsed_filters: filters,
+        });
       }
 
       return {
@@ -236,7 +293,8 @@ export class AnalyzerService {
 
       if (
         error instanceof BadRequestException ||
-        error instanceof NotFoundException
+        error instanceof NotFoundException ||
+        error instanceof UnprocessableEntityException
       ) {
         throw error;
       }
@@ -246,6 +304,7 @@ export class AnalyzerService {
       );
     }
   }
+
   //delete a string
   deleteString(input: string) {
     try {

@@ -21,7 +21,7 @@ import { CreateAnalysisDto } from './dto/create-analysis.dto';
 import { FilterDto } from './dto/filter.dto';
 
 @ApiTags('String Analyzer')
-@Controller('analyzer')
+@Controller('strings')
 export class AnalyzerController {
   constructor(private readonly analyzerService: AnalyzerService) {}
 
@@ -70,7 +70,7 @@ export class AnalyzerController {
     return this.analyzerService.filterByNaturalLanguage(query);
   }
 
-  @Post('string')
+  @Post()
   @ApiOperation({
     summary: 'Analyze a given string',
     description:
@@ -121,7 +121,7 @@ export class AnalyzerController {
     };
   }
 
-  @Get('strings')
+  @Get()
   @ApiOperation({
     summary: 'Get all analyzed strings (with optional filters)',
     description:
@@ -137,7 +137,14 @@ export class AnalyzerController {
             id: 'abc123',
             value: 'madam',
             properties: {
-              /* analysis data */
+              input: 'madam',
+              length: 5,
+              is_palindrome: true,
+              unique_characters: 3,
+              word_count: 1,
+              sha256_hash:
+                '3e25960a79dbc69b674cd4ec67a72c62d6f8b0a05d5c1eab8f9f6b3f1e2b1c8e2',
+              character_frequency_map: { m: 2, a: 2, d: 1 },
             },
             created_at: '2025-10-20T18:00:00Z',
           },
@@ -194,8 +201,8 @@ export class AnalyzerController {
     },
   })
   @ApiResponse({ status: 400, description: 'Invalid input string' })
-  getString(@Param('value') input: string) {
-    const data = this.analyzerService.getString(input);
+  getString(@Param('value') value: string) {
+    const data = this.analyzerService.getString(value);
 
     return {
       id: data?.sha256_hash,
