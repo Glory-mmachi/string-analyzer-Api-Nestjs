@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
@@ -82,7 +84,7 @@ export class AnalyzerController {
     examples: {
       sample: {
         summary: 'Example input',
-        value: { input: 'madam' },
+        value: { value: 'madam' },
       },
     },
   })
@@ -94,7 +96,6 @@ export class AnalyzerController {
         id: '3e25960a79dbc69b674cd4ec67a72c62',
         value: 'madam',
         properties: {
-          input: 'madam',
           length: 5,
           is_palindrome: true,
           unique_characters: 3,
@@ -107,15 +108,15 @@ export class AnalyzerController {
       },
     },
   })
+  @HttpCode(HttpStatus.CREATED)
   @ApiResponse({ status: 400, description: 'Invalid request body or input' })
   @ApiResponse({ status: 409, description: 'Duplicate input detected' })
   analyzeString(@Body() createAnalysisDto: CreateAnalysisDto) {
-    const { input } = createAnalysisDto;
-    const data = this.analyzerService.analyzeString(input);
-
+    const { value } = createAnalysisDto;
+    const { text, ...data } = this.analyzerService.analyzeString(value);
     return {
-      id: data?.sha256_hash,
-      value: input,
+      id: data.sha256_hash,
+      value: text,
       properties: data,
       created_at: new Date().toISOString(),
     };
@@ -137,7 +138,6 @@ export class AnalyzerController {
             id: 'abc123',
             value: 'madam',
             properties: {
-              input: 'madam',
               length: 5,
               is_palindrome: true,
               unique_characters: 3,
@@ -170,25 +170,24 @@ export class AnalyzerController {
 
   @Get(':value')
   @ApiOperation({
-    summary: 'Analyze a string',
+    summary: 'Get a string',
     description:
-      'Analyzes a string passed as a URL parameter and returns its computed properties.',
+      'Fetches a string passed as a URL parameter and returns its computed properties.',
   })
   @ApiParam({
     name: 'value',
     required: true,
-    description: 'The string to analyze',
-    example: 'racecar',
+    description: 'The string to fetch',
+    example: 'madam',
   })
   @ApiResponse({
     status: 200,
-    description: 'String successfully analyzed',
+    description: 'String successfully fetched',
     schema: {
       example: {
         id: '7c4a8d09ca3762af61e59520943dc26494f8941b',
-        value: 'racecar',
+        value: 'madam',
         properties: {
-          input: 'racecar',
           length: 7,
           is_palindrome: true,
           unique_characters: 4,
@@ -202,11 +201,10 @@ export class AnalyzerController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input string' })
   getString(@Param('value') value: string) {
-    const data = this.analyzerService.getString(value);
-
+    const { text, ...data } = this.analyzerService.getString(value);
     return {
-      id: data?.sha256_hash,
-      value: data?.input,
+      id: data.sha256_hash,
+      value: text,
       properties: data,
       created_at: new Date().toISOString(),
     };
@@ -219,9 +217,8 @@ export class AnalyzerController {
     type: String,
     description: 'String value to delete',
   })
-  @ApiResponse({ status: 200, description: 'Deleted successfully' })
-  @ApiResponse({ status: 404, description: 'String not found' })
-  @ApiResponse({ status: 500, description: 'Internal server error' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiResponse({ status: 204, description: 'Deleted successfully' })
   deleteString(@Param('input') input: string) {
     return this.analyzerService.deleteString(input);
   }

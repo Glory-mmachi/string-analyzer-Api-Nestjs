@@ -13,7 +13,7 @@ import * as crypto from 'crypto';
 import { FilterDto } from './dto/filter.dto';
 
 export interface StringAnalysis {
-  input: string;
+  text: string;
   length: number;
   is_palindrome: boolean;
   unique_characters: number;
@@ -100,7 +100,7 @@ export class AnalyzerService {
       if (filters.contains_character) {
         const character = filters.contains_character.toLowerCase();
         results = results.filter((r) =>
-          r.input.toLowerCase().includes(character),
+          r.text.toLowerCase().includes(character),
         );
       }
       return results;
@@ -118,15 +118,19 @@ export class AnalyzerService {
   analyzeString(input: string) {
     try {
       if (!input || input === undefined)
-        throw new BadRequestException("Missing required field 'input'");
+        throw new BadRequestException(
+          `Invalid request body or missing "value" field`,
+        );
 
       if (typeof input !== 'string')
         throw new UnprocessableEntityException(
-          "Invalid data type for 'input' (must be string)",
+          `Invalid data type for "value" (must be string)`,
         );
 
-      if (this.analyses.some((a) => a.input === input)) {
-        throw new ConflictException(`"${input}" already exists`);
+      if (
+        this.analyses.some((a) => a.text.toLowerCase() === input.toLowerCase())
+      ) {
+        throw new ConflictException(`String already exists in the system`);
       }
 
       // Clean and normalize
@@ -151,7 +155,7 @@ export class AnalyzerService {
       }
 
       const result: StringAnalysis = {
-        input,
+        text: input,
         length,
         is_palindrome,
         unique_characters,
@@ -182,7 +186,7 @@ export class AnalyzerService {
       return {
         data: results.map((result) => ({
           id: result.sha256_hash,
-          value: result.input,
+          value: result.text,
           properties: result,
           created_at: new Date().toISOString(),
         })),
@@ -200,17 +204,24 @@ export class AnalyzerService {
   //Get a string
   getString(input: string) {
     try {
-      const value = this.analyses.find((a) => a.input === input);
-      if (!value) {
-        throw new NotFoundException(`Not found`);
+      //find data in memory
+      const data = this.analyses.find(
+        (a) => a.text.toLowerCase() === input.toLowerCase(),
+      );
+
+      //checks if it exists
+      if (!data) {
+        throw new NotFoundException(`String does not exist in the system`);
       }
-      return value;
+      return data;
     } catch (error) {
       console.log(error);
       if (error instanceof NotFoundException) {
         throw error;
       }
-      throw new InternalServerErrorException('Failed,Please try again');
+      throw new InternalServerErrorException(
+        'Failed to fetch data,Please try again',
+      );
     }
   }
   //Filter by natural language
@@ -309,11 +320,11 @@ export class AnalyzerService {
   deleteString(input: string) {
     try {
       const initialLength = this.analyses.length;
-      this.analyses = this.analyses.filter((a) => a.input !== input);
+      this.analyses = this.analyses.filter((a) => a.text !== input);
       if (this.analyses.length === initialLength) {
-        throw new NotFoundException(`No record found for "${input}"`);
+        throw new NotFoundException(`String does not exist in the system"`);
       }
-      return { message: 'Deleted successfully' };
+      return {};
     } catch (error) {
       console.log(error);
       if (error instanceof NotFoundException) {

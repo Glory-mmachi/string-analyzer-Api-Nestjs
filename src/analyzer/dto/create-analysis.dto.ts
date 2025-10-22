@@ -3,6 +3,6 @@ import { IsNotEmpty, IsString } from 'class-validator';
 
 export class CreateAnalysisDto {
   @IsString()
-  @IsNotEmpty({ message: 'Input field cannot be empty.' })
-  input: string;
+  @IsNotEmpty({ message: 'text field cannot be empty.' })
+  value: string;
 }
