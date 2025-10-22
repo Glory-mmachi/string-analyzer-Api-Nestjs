@@ -39,8 +39,8 @@ export class AnalyzerService {
       // Validation checks
       if (
         is_palindrome !== undefined &&
-        is_palindrome !== 'true' &&
-        is_palindrome !== 'false'
+        is_palindrome !== true &&
+        is_palindrome !== false
       ) {
         throw new BadRequestException(
           "Invalid value for 'is_palindrome'. Must be true or false.",
